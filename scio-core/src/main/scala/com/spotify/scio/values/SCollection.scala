@@ -27,13 +27,14 @@ import java.util.UUID
 import com.google.api.services.bigquery.model.{TableReference, TableRow, TableSchema}
 import com.google.api.services.datastore.DatastoreV1.Entity
 import com.spotify.scio.ScioContext
-import com.spotify.scio.coders.KryoAtomicCoder
+import com.spotify.scio.coders.{KryoAtomicCoder, AvroBytesUtil}
 import com.spotify.scio.io._
 import com.spotify.scio.testing._
 import com.spotify.scio.util._
 import com.spotify.scio.util.random.{BernoulliSampler, PoissonSampler}
 import com.twitter.algebird.{Aggregator, Monoid, Semigroup}
 import org.apache.avro.Schema
+import org.apache.avro.generic.GenericRecord
 import org.apache.avro.specific.SpecificRecordBase
 import org.apache.beam.sdk.coders.{Coder, TableRowJsonCoder}
 import org.apache.beam.sdk.io.BigQueryIO.Write.{CreateDisposition, WriteDisposition}
@@ -41,7 +42,6 @@ import org.apache.beam.sdk.{io => gio}
 import org.apache.beam.sdk.runners.DirectPipelineRunner
 import org.apache.beam.sdk.transforms._
 import org.apache.beam.sdk.transforms.windowing._
-import org.apache.beam.sdk.util.CoderUtils
 import org.apache.beam.sdk.util.WindowingStrategy.AccumulationMode
 import org.apache.beam.sdk.values._
 import org.joda.time.{Duration, Instant}
@@ -801,18 +801,18 @@ sealed trait SCollection[T] extends PCollectionWrapper[T] {
    * Save this SCollection as an object file using default serialization.
    * @group output
    */
-  def saveAsObjectFile(path: String,
-                       suffix: String = ".obj", numShards: Int = 0): Future[Tap[T]] = {
+  def saveAsObjectFile(path: String, numShards: Int = 0): Future[Tap[T]] = {
     if (context.isTest) {
       saveAsInMemoryTap
     } else {
       this
-        .parDo(new DoFn[T, String] {
+        .parDo(new DoFn[T, GenericRecord] {
           private val coder = KryoAtomicCoder[T]
-          override def processElement(c: DoFn[T, String]#ProcessContext): Unit =
-            c.output(CoderUtils.encodeToBase64(coder, c.element()))
+          override def processElement(c: DoFn[T, GenericRecord]#ProcessContext): Unit = {
+            c.output(AvroBytesUtil.encode(coder, c.element()))
+          }
         })
-        .saveAsTextFile(path, suffix, numShards)
+        .saveAsAvroFile(path, numShards, AvroBytesUtil.schema)
       context.makeFuture(ObjectFileTap[T](path + "/part-*"))
     }
   }
