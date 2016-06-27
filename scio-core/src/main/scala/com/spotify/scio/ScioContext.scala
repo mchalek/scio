@@ -34,12 +34,14 @@ import com.google.cloud.dataflow.sdk.testing.TestPipeline
 import com.google.cloud.dataflow.sdk.transforms.Combine.CombineFn
 import com.google.cloud.dataflow.sdk.transforms.{Create, DoFn, PTransform}
 import com.google.cloud.dataflow.sdk.values.{PBegin, PCollection, POutput, TimestampedValue}
+import com.google.protobuf.{GeneratedMessage, Message}
 import com.spotify.scio.bigquery._
-import com.spotify.scio.coders.{KryoAtomicCoder, AvroBytesUtil}
+import com.spotify.scio.coders.{AvroBytesUtil, KryoAtomicCoder}
 import com.spotify.scio.io.Tap
 import com.spotify.scio.testing._
 import com.spotify.scio.util.{CallSites, ScioUtil}
 import com.spotify.scio.values._
+import com.twitter.chill.Externalizer
 import org.apache.avro.Schema
 import org.apache.avro.generic.GenericRecord
 import org.apache.avro.specific.SpecificRecordBase
@@ -365,6 +367,21 @@ class ScioContext private[scio] (val options: PipelineOptions,
       wrap(this.applyInternal(t)).setName(path)
     }
   }
+
+  /**
+   * Get an SCollection for a Protobuf file.
+   * @group input
+   */
+  def protobufFile[T: ClassTag](path: String)
+                               (implicit ev: T <:< GeneratedMessage with Message): SCollection[T] =
+    pipelineOp {
+      // protobuf parser is not serializable - defeat via twitter's externalizer
+      val serializableParser = Externalizer(ScioUtil.getProtobufParser[T])
+      this.objectFile[Array[Byte]](path).map{ bytes =>
+        lazy val parser = serializableParser.get
+        parser.parseFrom(bytes)
+      }
+    }
 
   /**
    * Get an SCollection for a BigQuery SELECT query.

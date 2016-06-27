@@ -20,9 +20,11 @@ package com.spotify.scio.io
 import java.util.UUID
 
 import com.google.api.services.bigquery.model.TableReference
+import com.google.protobuf.{GeneratedMessage, Message}
 import com.spotify.scio.ScioContext
 import com.spotify.scio.bigquery.{BigQueryClient, TableRow}
-import com.spotify.scio.coders.{KryoAtomicCoder, AvroBytesUtil}
+import com.spotify.scio.coders.{AvroBytesUtil, KryoAtomicCoder}
+import com.spotify.scio.util.ScioUtil
 import com.spotify.scio.values.SCollection
 import org.apache.avro.Schema
 import org.apache.avro.generic.GenericRecord
@@ -62,6 +64,16 @@ case class TextTap(path: String) extends Tap[String] {
 case class AvroTap[T: ClassTag](path: String, schema: Schema = null) extends Tap[T] {
   override def value: Iterator[T] = FileStorage(path).avroFile(schema)
   override def open(sc: ScioContext): SCollection[T] = sc.avroFile[T](path, schema)
+}
+
+/** Tap for Protobuf files on local file system or GCS. */
+case class ProtobufTap[T: ClassTag](path: String)(implicit ev: T <:< GeneratedMessage with Message)
+extends Tap[T] {
+  override def value: Iterator[T] = {
+    val parser = ScioUtil.getProtobufParser[T]
+    ObjectFileTap[Array[Byte]](path).value.map(parser.parseFrom)
+  }
+  override def open(sc: ScioContext): SCollection[T] = sc.protobufFile(path)
 }
 
 /** Tap for JSON files on local file system or GCS. */

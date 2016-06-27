@@ -67,6 +67,8 @@ case class ObjectFileIO[T](path: String) extends TestIO(path)
 
 case class AvroIO[T](path: String) extends TestIO(path)
 
+case class ProtobufIO[T](path: String) extends TestIO(path)
+
 case class BigQueryIO(tableSpecOrQuery: String) extends TestIO[TableRow](tableSpecOrQuery)
 
 case class DatastoreIO(datasetId: String, query: Query = null)

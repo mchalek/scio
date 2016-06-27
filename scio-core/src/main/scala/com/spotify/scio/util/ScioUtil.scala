@@ -19,6 +19,8 @@ package com.spotify.scio.util
 
 import java.net.URI
 
+import com.google.protobuf.{GeneratedMessage, Message, Parser}
+
 import scala.reflect.ClassTag
 
 private[scio] object ScioUtil {
@@ -29,4 +31,6 @@ private[scio] object ScioUtil {
 
   def classOf[T: ClassTag]: Class[T] = implicitly[ClassTag[T]].runtimeClass.asInstanceOf[Class[T]]
 
+  def getProtobufParser[T: ClassTag](implicit ev: T <:< GeneratedMessage with Message): Parser[T] =
+    classOf[T].getDeclaredField("PARSER").get(null).asInstanceOf[Parser[T]]
 }

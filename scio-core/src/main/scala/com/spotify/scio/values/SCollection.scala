@@ -34,8 +34,9 @@ import com.google.cloud.dataflow.sdk.transforms._
 import com.google.cloud.dataflow.sdk.transforms.windowing._
 import com.google.cloud.dataflow.sdk.util.WindowingStrategy.AccumulationMode
 import com.google.cloud.dataflow.sdk.values._
+import com.google.protobuf.{GeneratedMessage, Message}
 import com.spotify.scio.ScioContext
-import com.spotify.scio.coders.{KryoAtomicCoder, AvroBytesUtil}
+import com.spotify.scio.coders.{AvroBytesUtil, KryoAtomicCoder}
 import com.spotify.scio.io._
 import com.spotify.scio.testing._
 import com.spotify.scio.util._
@@ -858,6 +859,22 @@ sealed trait SCollection[T] extends PCollectionWrapper[T] {
         this.applyInternal(transform.withSchema(schema).asInstanceOf[gio.AvroIO.Write.Bound[T]])
       }
       context.makeFuture(AvroTap(path + "/part-*", schema))
+    }
+
+  /**
+   * Save this SCollection as a Protobuf file.
+   * @group output
+   */
+  def saveAsProtobufFile(path: String, numShards: Int = 0)
+                        (implicit ev: T <:< GeneratedMessage with Message): Future[Tap[T]] =
+    if(context.isTest) {
+      context.testOut(ProtobufIO(path))(this)
+      saveAsInMemoryTap
+    } else {
+      this.asInstanceOf[SCollection[Message]]
+        .map(_.toByteArray)
+        .saveAsObjectFile(path, numShards)
+      context.makeFuture(ProtobufTap(path + "/part-*"))
     }
 
   /**
