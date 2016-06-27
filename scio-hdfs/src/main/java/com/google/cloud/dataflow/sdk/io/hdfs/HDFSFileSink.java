@@ -1,20 +1,21 @@
 /*
- * Copyright (C) 2015 The Google Cloud Dataflow Hadoop Library Authors
- *
- * Licensed under the Apache License, Version 2.0 (the "License"); you may not
- * use this file except in compliance with the License. You may obtain a copy of
- * the License at
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
  *
  *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
- * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
- * License for the specific language governing permissions and limitations under
- * the License.
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
-
-package com.google.cloud.dataflow.contrib.hadoop;
+package com.google.cloud.dataflow.sdk.io.hdfs;
 
 import com.google.api.client.util.Maps;
 import com.google.cloud.dataflow.sdk.coders.Coder;
@@ -41,12 +42,13 @@ import java.util.Random;
 import java.util.Set;
 
 /**
- * A {@code Sink} for writing records to a Hadoop filesystem using a Hadoop file-based output format.
+ * A {@code Sink} for writing records to a Hadoop filesystem using a Hadoop file-based output
+ * format.
  *
  * @param <K> The type of keys to be written to the sink.
  * @param <V> The type of values to be written to the sink.
  */
-public class HadoopFileSink<K, V> extends Sink<KV<K, V>> {
+public class HDFSFileSink<K, V> extends Sink<KV<K, V>> {
 
   private static final JobID jobId = new JobID(
       Long.toString(System.currentTimeMillis()),
@@ -58,13 +60,14 @@ public class HadoopFileSink<K, V> extends Sink<KV<K, V>> {
   // workaround to make Configuration serializable
   private final Map<String, String> map;
 
-  public HadoopFileSink(String path, Class<? extends FileOutputFormat<K, V>> formatClass) {
+  public HDFSFileSink(String path, Class<? extends FileOutputFormat<K, V>> formatClass) {
     this.path = path;
     this.formatClass = formatClass;
     this.map = Maps.newHashMap();
   }
 
-  public HadoopFileSink(String path, Class<? extends FileOutputFormat<K, V>> formatClass, Configuration conf) {
+  public HDFSFileSink(String path, Class<? extends FileOutputFormat<K, V>> formatClass,
+                      Configuration conf) {
     this(path, formatClass);
     // serialize conf to map
     for (Map.Entry<String, String> entry : conf) {
@@ -77,15 +80,17 @@ public class HadoopFileSink<K, V> extends Sink<KV<K, V>> {
     try {
       Job job = jobInstance();
       FileSystem fs = FileSystem.get(job.getConfiguration());
-      Preconditions.checkState(!fs.exists(new Path(path)), "Output path " + path + " already exists");
+      Preconditions.checkState(
+          !fs.exists(new Path(path)),
+          "Output path " + path + " already exists");
     } catch (IOException e) {
       throw new RuntimeException(e);
     }
   }
 
   @Override
-  public WriteOperation<KV<K, V>, ?> createWriteOperation(PipelineOptions options) {
-    return new HadoopWriteOperation<>(this, path, formatClass);
+  public Sink.WriteOperation<KV<K, V>, ?> createWriteOperation(PipelineOptions options) {
+    return new HDFSWriteOperation<>(this, path, formatClass);
   }
 
   private Job jobInstance() throws IOException {
@@ -103,15 +108,16 @@ public class HadoopFileSink<K, V> extends Sink<KV<K, V>> {
   // WriteOperation
   // =======================================================================
 
-  public static class HadoopWriteOperation<K, V> extends WriteOperation<KV<K, V>, String> {
+  /** {{@link WriteOperation}} for HDFS. */
+  public static class HDFSWriteOperation<K, V> extends WriteOperation<KV<K, V>, String> {
 
     private final Sink<KV<K, V>> sink;
     protected final String path;
     protected final Class<? extends FileOutputFormat<K, V>> formatClass;
 
-    public HadoopWriteOperation(Sink<KV<K, V>> sink,
-                                String path,
-                                Class<? extends FileOutputFormat<K, V>> formatClass) {
+    public HDFSWriteOperation(Sink<KV<K, V>> sink,
+                              String path,
+                              Class<? extends FileOutputFormat<K, V>> formatClass) {
       this.sink = sink;
       this.path = path;
       this.formatClass = formatClass;
@@ -119,13 +125,13 @@ public class HadoopFileSink<K, V> extends Sink<KV<K, V>> {
 
     @Override
     public void initialize(PipelineOptions options) throws Exception {
-      Job job = ((HadoopFileSink<K, V>) getSink()).jobInstance();
+      Job job = ((HDFSFileSink<K, V>) getSink()).jobInstance();
       FileOutputFormat.setOutputPath(job, new Path(path));
     }
 
     @Override
     public void finalize(Iterable<String> writerResults, PipelineOptions options) throws Exception {
-      Job job = ((HadoopFileSink<K, V>) getSink()).jobInstance();
+      Job job = ((HDFSFileSink<K, V>) getSink()).jobInstance();
       FileSystem fs = FileSystem.get(job.getConfiguration());
 
       // If there are 0 output shards, just create output folder.
@@ -157,7 +163,9 @@ public class HadoopFileSink<K, V> extends Sink<KV<K, V>> {
         actual.add(pos > 0 ? name.substring(0, pos) : name);
       }
 
-      Preconditions.checkState(actual.equals(expected), "Writer results and output files do not match");
+      Preconditions.checkState(
+          actual.equals(expected),
+          "Writer results and output files do not match");
 
       // rename output shards to Hadoop style, i.e. part-r-00000.txt
       int i = 0;
@@ -165,14 +173,16 @@ public class HadoopFileSink<K, V> extends Sink<KV<K, V>> {
         String name = s.getPath().getName();
         int pos = name.indexOf('.');
         String ext = pos > 0 ? name.substring(pos) : "";
-        fs.rename(s.getPath(), new Path(s.getPath().getParent(), String.format("part-r-%05d%s", i, ext)));
+        fs.rename(
+            s.getPath(),
+            new Path(s.getPath().getParent(), String.format("part-r-%05d%s", i, ext)));
         i++;
       }
     }
 
     @Override
     public Writer<KV<K, V>, String> createWriter(PipelineOptions options) throws Exception {
-      return new HadoopWriter<>(this, path, formatClass);
+      return new HDFSWriter<>(this, path, formatClass);
     }
 
     @Override
@@ -191,9 +201,10 @@ public class HadoopFileSink<K, V> extends Sink<KV<K, V>> {
   // Writer
   // =======================================================================
 
-  public static class HadoopWriter<K, V> extends Writer<KV<K, V>, String> {
+  /** {{@link Writer}} for HDFS files. */
+  public static class HDFSWriter<K, V> extends Writer<KV<K, V>, String> {
 
-    private final HadoopWriteOperation<K, V> writeOperation;
+    private final HDFSWriteOperation<K, V> writeOperation;
     private final String path;
     private final Class<? extends FileOutputFormat<K, V>> formatClass;
 
@@ -204,9 +215,9 @@ public class HadoopFileSink<K, V> extends Sink<KV<K, V>> {
     private RecordWriter<K, V> recordWriter;
     private FileOutputCommitter outputCommitter;
 
-    public HadoopWriter(HadoopWriteOperation<K, V> writeOperation,
-                        String path,
-                        Class<? extends FileOutputFormat<K, V>> formatClass) {
+    public HDFSWriter(HDFSWriteOperation<K, V> writeOperation,
+                      String path,
+                      Class<? extends FileOutputFormat<K, V>> formatClass) {
       this.writeOperation = writeOperation;
       this.path = path;
       this.formatClass = formatClass;
@@ -216,7 +227,7 @@ public class HadoopFileSink<K, V> extends Sink<KV<K, V>> {
     public void open(String uId) throws Exception {
       this.hash = uId.hashCode();
 
-      Job job = ((HadoopFileSink<K, V>) getWriteOperation().getSink()).jobInstance();
+      Job job = ((HDFSFileSink<K, V>) getWriteOperation().getSink()).jobInstance();
       FileOutputFormat.setOutputPath(job, new Path(path));
 
       // Each Writer is responsible for writing one bundle of elements and is represented by one
